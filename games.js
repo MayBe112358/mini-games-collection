@@ -22,5 +22,16 @@ const games = [
     localUrl: "./跳一跳/index.html",
     liveUrl: "https://maybe112358.github.io/tiaoyitiao/",
     thumbnail: "./assets/thumbs/tiaoyitiao.png"
+  },
+  {
+    title: "一色一牛",
+    subtitle: "逻辑推理",
+    description: "每行、每列、每种颜色各放一头牛，且互不相邻。6×6 到 12×12 关卡，支持随机出题。",
+    category: "益智",
+    tags: ["原生 HTML", "关卡", "随机出题", "移动端"],
+    version: "HTML",
+    emoji: "🐮",
+    localUrl: "./一色一牛/index.html",
+    thumbnail: "./assets/thumbs/yi-se-yi-niu.png"
   }
 ];
