@@ -17,6 +17,8 @@
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
   }
+  /* 画布与所有 UI 放在同一个舞台里，桌面端 HUD 不会飘到画布外 */
+  #stage { position: relative; overflow: hidden; flex: none; }
   #game {
     display: block;
     box-shadow: 0 0 60px rgba(0,0,0,0.4);
@@ -100,7 +102,7 @@
   @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.12)} }
 
   /* skins */
-  .skins { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; max-width: 360px; }
+  .skins { display: grid; grid-template-columns: repeat(3, 60px); gap: 14px 18px; justify-content: center; }
   .skin {
     width: 60px; height: 60px; border-radius: 16px; cursor: pointer; pointer-events: auto;
     display: flex; align-items: center; justify-content: center; font-size: 32px;
@@ -111,6 +113,8 @@
   .skin.sel { border-color: #ffd166; background: rgba(255,209,102,0.25); }
   .skin.locked { opacity: 0.4; filter: grayscale(1); }
   .skin .lockreq { position: absolute; font-size: 10px; margin-top: 40px; }
+  .backlink { color: #fff; opacity: .75; font-size: 14px; text-decoration: none; pointer-events: auto; padding: 6px 10px; }
+  .backlink:hover { opacity: 1; }
   .section-label { font-size: 14px; opacity: 0.8; letter-spacing: 2px; margin-bottom: -6px; }
 
   .hint {
@@ -133,6 +137,7 @@
 </head>
 <body>
 <div id="wrap">
+ <div id="stage">
   <canvas id="game"></canvas>
 
   <!-- HUD -->
@@ -161,6 +166,7 @@
       <button class="btn secondary" id="lbBtn">🏆 排行榜</button>
       <button class="btn secondary" id="streamerBtn">🎙️ 主播模式</button>
     </div>
+    <a class="backlink" href="../index.html">← 返回小游戏合集</a>
   </div>
 
   <!-- Game over -->
@@ -175,6 +181,7 @@
     </div>
     <button class="btn" id="retryBtn">再来一局</button>
     <button class="btn secondary" id="homeBtn">返回主页</button>
+    <a class="backlink" href="../index.html">← 返回小游戏合集</a>
   </div>
 
   <!-- Leaderboard -->
@@ -195,7 +202,8 @@
     <button class="btn secondary" id="streamerBack">返回</button>
   </div>
 
-  <div class="hint hidden" id="hint">按住屏幕蓄力，松开跳跃</div>
+  <div class="hint hidden" id="hint">按住屏幕蓄力，松开跳跃（电脑可按空格）</div>
+ </div>
 </div>
 
 <script>
@@ -208,6 +216,7 @@
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+const stage = document.getElementById('stage');
 
 // ---- responsive sizing ----
 let W = 0, H = 0, DPR = 1;
@@ -218,6 +227,8 @@ function resize(){
   // 桌面端给个手机框
   if (w / h > 0.62) { w = Math.round(h * 0.56); }
   W = w; H = h;
+  stage.style.width = w + 'px';
+  stage.style.height = h + 'px';
   canvas.style.width = w + 'px';
   canvas.style.height = h + 'px';
   canvas.width = Math.round(w * DPR);
@@ -320,6 +331,7 @@ let G = null;
 
 function newGame(){
   G = {
+    prevBest: save.best,     // 本局开始前的最高分，用来判断是否“新纪录”
     blocks: [],
     player: null,
     score: 0, combo: 0, maxCombo: 0, jumps: 0,
@@ -486,8 +498,9 @@ function doJump(charge){
   const from = p.onBlock;
   const target = G.blocks[G.blocks.indexOf(from)+1];
   if(!target){ return; }
-  // direction toward target
-  let dx = target.x - from.x, dz = target.z - from.z;
+  // direction toward target centre, measured from where the player actually
+  // stands (an off-centre landing must not make the next jump impossible)
+  let dx = target.x - p.x, dz = target.z - p.z;
   const len = Math.hypot(dx,dz) || 1;
   dx/=len; dz/=len;
   // jump power: charge (0..1) maps to distance
@@ -652,10 +665,19 @@ function landPlayer(){
   const dx = Math.abs(p.x - b.x), dz = Math.abs(p.z - b.z);
 
   const onTarget = b && dx <= halfW && dz <= halfD;
-  // also could land back/overlap on current? treat fail otherwise.
+  const from = p.onBlock;
+  const onFrom = from && from.w > 0.3 &&
+    Math.abs(p.x - from.x) <= from.w/2 && Math.abs(p.z - from.z) <= from.d/2;
 
   if(onTarget){
     landSuccess(b, dx, dz);
+  } else if(onFrom){
+    // 力度太小、没跳出当前方块：原地落下，不得分、连击中断
+    G.state = 'play';
+    G.combo = 0;
+    p.squash = 0.35;
+    Sound.land();
+    addFloat(p.x, p.z, '力度不够', '#fff');
   } else {
     // shield can save one fail
     if(G.buffs.shield>0){
@@ -733,6 +755,7 @@ function afterLandCommon(b, perfect, dx, dz){
   const idx = G.blocks.indexOf(b);
   if(idx > 6){
     G.blocks.splice(0, idx-6);
+    G.items = G.items.filter(it => !it.taken && G.blocks.includes(it.block));
   }
 
   updateBest();
@@ -1203,10 +1226,10 @@ function drawChargeBar(){
     const from = p.onBlock;
     const target = G.blocks[G.blocks.indexOf(from)+1];
     if(target){
-      let dx = target.x-from.x, dz=target.z-from.z;
+      let dx = target.x-p.x, dz=target.z-p.z;
       const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
       const dist = 1.0 + c*4.2;
-      const lx = from.x+dx*dist, lz = from.z+dz*dist;
+      const lx = p.x+dx*dist, lz = p.z+dz*dist;
       const ls = worldToScreen(lx,lz, blockSurfaceH(target));
       ctx.strokeStyle='rgba(255,93,143,0.85)'; ctx.lineWidth=2;
       ctx.setLineDash([5,5]);
@@ -1351,7 +1374,6 @@ function gameOver(){
   save.scores.push(G.score);
   save.scores.sort((a,b)=>b-a);
   save.scores = save.scores.slice(0,5);
-  const isNew = G.score>0 && G.score>=Math.max(...(save.scores.length?save.scores:[0])) && G.score>0;
   if(G.score>save.best){ save.best=G.score; }
   persist();
 
@@ -1373,7 +1395,7 @@ function showGameOver(){
   $('overCombo').textContent = G.maxCombo;
   $('overJumps').textContent = G.jumps;
   const nb = $('newBest');
-  if(G.score>0 && G.score===save.best && save.scores[0]===G.score){
+  if(G.score > 0 && G.score > G.prevBest){
     nb.classList.remove('hidden');
   } else nb.classList.add('hidden');
 
