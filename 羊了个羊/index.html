@@ -131,6 +131,8 @@
   .btn.green{background:linear-gradient(#7ed957,#4caf50);}
   .btn.blue{background:linear-gradient(#6bc8ff,#4d8bff);}
   .btn.ghost{background:linear-gradient(#cdb9a3,#b39b80);}
+  a.btn{text-decoration:none;text-align:center;}
+  .btn.link{background:none;box-shadow:none;color:var(--ink);opacity:.7;font-size:14px;font-weight:700;padding:6px;margin:2px 0 0;}
 
   /* level select */
   #levelGrid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:14px 0;}
@@ -154,7 +156,7 @@
 
   /* toast */
   #toast{
-    position:absolute;left:50%;top:46%;transform:transl(-50%,-50%);
+    position:absolute;left:50%;top:46%;
     background:rgba(0,0,0,.78);color:#fff;padding:10px 18px;border-radius:14px;
     font-weight:700;font-size:14px;z-index:1500;opacity:0;transition:opacity .2s;
     pointer-events:none;white-space:nowrap;transform:translateX(-50%);
@@ -203,6 +205,7 @@
       <button class="btn primary" id="playBtn">开始游戏 ▶</button>
       <button class="btn blue" id="selectBtn">选择关卡</button>
       <div class="sub" style="margin-top:10px;font-size:12px;">只点最上层 · 凑齐3个相同即消除</div>
+      <a class="btn link" href="../index.html">← 返回小游戏合集</a>
     </div>
   </div>
 
@@ -253,7 +256,7 @@ const LEVELS = [
   {name:"第3关 · 烧脑",  layers:7, count:60, icons:12, area:[350,340]},
   {name:"第4关 · 地狱",  layers:9, count:90, icons:15, area:[360,350]},
 ];
-const CARD = 54, SLOT_MAX = 7, COVER = CARD*0.86, HALF = CARD/2;
+const CARD = 54, SLOT_MAX = 7, COVER = CARD-2, HALF = CARD/2;
 
 /* ===================== 状态 ===================== */
 let state = null;       // 当前关卡运行态
@@ -347,11 +350,18 @@ function buildLevel(idx){
   const cards=[];
   const maxX = W-CARD, maxY = H-CARD;
   const cols = Math.floor(maxX/HALF), rows = Math.floor(maxY/HALF);
+  // 同一层的牌互不重叠，否则会出现“看着压在下面却能点”的情况
+  const sameLayerHit=(x,y,layer)=>cards.some(o=>o.layer===layer && Math.abs(o.x-x)<CARD && Math.abs(o.y-y)<CARD);
   for(let i=0;i<cfg.count;i++){
-    const layer = Math.floor(Math.random()*cfg.layers);
-    const offX = (layer*11)%HALF, offY = (layer*13)%HALF;
-    let x = Math.min(maxX, (Math.floor(Math.random()*cols))*HALF + offX);
-    let y = Math.min(maxY, (Math.floor(Math.random()*rows))*HALF + offY);
+    let x=0, y=0, layer=0;
+    for(let tries=0;tries<80;tries++){
+      layer = Math.floor(Math.random()*cfg.layers);
+      const offX = (layer*11)%HALF, offY = (layer*13)%HALF;
+      x = Math.min(maxX, (Math.floor(Math.random()*cols))*HALF + offX);
+      y = Math.min(maxY, (Math.floor(Math.random()*rows))*HALF + offY);
+      if(!sameLayerHit(x,y,layer)) break;
+    }
+    if(sameLayerHit(x,y,layer)) layer = Math.max(cfg.layers, ...cards.map(c=>c.layer+1)); // 实在放不下就叠到新的一层
     cards.push({id:i, icon:deck[i], x, y, layer, removed:false});
   }
   return {cfg, W, H, cards, slots:[]};
@@ -539,7 +549,7 @@ function checkEnd(){
 /* ===================== 撤回快照 ===================== */
 function pushHistory(){
   history.push({
-    cards: state.cards.map(c=>({id:c.id,icon:c.icon,removed:c.removed})),
+    cards: state.cards.map(c=>({id:c.id,icon:c.icon,x:c.x,y:c.y,layer:c.layer,removed:c.removed})),
     slots: state.slots.map(s=>({...s})),
     moves: state.moves||0
   });
@@ -556,8 +566,7 @@ function doUndo(){
   if(history.length===0){ toast("没有可撤回的操作"); return; }
   if(!tryConsume("undo")) return;
   const snap=history.pop();
-  const map={};snap.cards.forEach(s=>map[s.id]=s);
-  state.cards.forEach(c=>{c.icon=map[c.id].icon;c.removed=map[c.id].removed;});
+  state.cards=snap.cards.map(c=>({...c}));   // 整体还原（含“移出”放回台面的牌）
   state.slots=snap.slots.map(s=>({...s}));
   state.moves=snap.moves;
   $("moves").textContent=state.moves;
@@ -592,12 +601,12 @@ function clearHint(){
 }
 function doShuffle(){
   if(!tryConsume("shuffle")) return;
+  pushHistory();
   const remain=state.cards.filter(c=>!c.removed);
   const icons=remain.map(c=>c.icon);
   for(let i=icons.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[icons[i],icons[j]]=[icons[j],icons[i]];}
   remain.forEach((c,i)=>c.icon=icons[i]);
   sfx.prop();
-  pushHistory();
   renderBoard();
   toast("已重新洗牌 🔀");
 }
@@ -617,7 +626,7 @@ function doTakeout(){
   });
   sfx.prop();
   renderBoard(); renderSlots();
-  toast("移出 3 张到台面 💣");
+  toast("移出 "+take.length+" 张到台面 💣");
 }
 function adGain(prop){
   if(anchorMode) return;          // 主播模式无限，无需广告
@@ -832,6 +841,7 @@ $("anchorClose").onclick=()=>hide("anchorScreen");
 $("anchorInput").addEventListener("keydown",e=>{ if(e.key==="Enter") applyAnchor(); });
 document.querySelectorAll(".prop").forEach(btn=>{
   btn.onclick=()=>{
+    if(!state || busy) return;     // 卡牌飞行/消除动画中不响应道具，避免状态错乱
     const p=btn.dataset.prop;
     if(p==="hint")doHint();
     else if(p==="undo")doUndo();

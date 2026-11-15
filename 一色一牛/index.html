@@ -105,6 +105,8 @@ h2 b{color:var(--ink);font-size:15px}
 .chip b{font-weight:600;font-size:14.5px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chip small{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .chip small.ok{color:var(--accent);font-weight:500}
+.back{align-self:flex-start;color:var(--muted);font-size:13.5px;text-decoration:none;margin:-8px 0 -4px;padding:2px 0}
+.back:hover{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -119,6 +121,7 @@ h2 b{color:var(--ink);font-size:15px}
 <circle cx="17" cy="28.8" r="1.2" fill="var(--patch)"/><circle cx="23" cy="28.8" r="1.2" fill="var(--patch)"/>
 </symbol></svg>
 <div class="wrap">
+<a class="back" href="../index.html">← 返回小游戏合集</a>
 <header><h1><svg aria-hidden="true"><use href="#cow"/></svg>一色一牛</h1><div class="pill"><b id="lname"></b><span id="lsize"></span></div></header>
 <ul class="rules">
 <li><svg viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="6" fill="var(--tray)"/><rect x="1" y="11" width="28" height="8" fill="var(--r3)"/><rect x="11" y="1" width="8" height="28" fill="var(--r3)"/><circle cx="15" cy="15" r="3.4" fill="var(--cow)" stroke="var(--patch)" stroke-width="1.4"/></svg><span><b>行列各一头</b>每行、每列</span></li>

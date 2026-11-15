@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="轻量好玩的网页小游戏合集：三羊开泰、跳一跳、一色一牛，打开即玩，支持手机。">
+  <meta name="theme-color" content="#17212b">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AE%3C/text%3E%3C/svg%3E">
   <title>小游戏合集</title>
   <script src="./games.js"></script>
   <style>
@@ -355,6 +358,10 @@
       color: #fff;
     }
 
+    .action.wide {
+      grid-column: 1 / -1;
+    }
+
     .action:hover {
       transform: translateY(-1px);
       border-color: #17212b;
@@ -388,6 +395,7 @@
 
       .topbar {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 16px;
       }
 
@@ -444,7 +452,7 @@
       </div>
       <div class="stats">
         <div class="stat"><b id="totalCount">0</b><span>已收录</span></div>
-        <div class="stat"><b id="liveCount">0</b><span>已部署</span></div>
+        <div class="stat"><b id="liveCount">0</b><span>独立站点</span></div>
         <div class="stat"><b id="categoryCount">0</b><span>分类</span></div>
       </div>
     </section>
@@ -520,16 +528,16 @@
           ? `<img src="${game.thumbnail}" alt="${game.title} 截图" loading="eager" decoding="async" onerror="this.parentElement.innerHTML='<div class=&quot;thumb-fallback&quot;>${game.emoji || "🎮"}</div>'">`
           : `<div class="thumb-fallback">${game.emoji || "🎮"}</div>`;
         const liveButton = game.liveUrl
-          ? `<a class="action" href="${game.liveUrl}" target="_blank" rel="noopener">${icon.external}<span>线上</span></a>`
-          : `<span class="action" aria-disabled="true">${icon.external}<span>待部署</span></span>`;
+          ? `<a class="action" href="${game.liveUrl}" target="_blank" rel="noopener" title="在独立站点打开">${icon.external}<span>独立站</span></a>`
+          : "";
 
         return `
           <article class="game-card">
-            <a class="thumb" href="${game.localUrl}" target="_blank" rel="noopener" aria-label="打开 ${game.title}">
+            <a class="thumb" href="${game.localUrl}" aria-label="开始玩 ${game.title}">
               ${thumb}
               <div class="badge-row">
                 <span class="badge">${game.category || "游戏"}</span>
-                ${game.liveUrl ? '<span class="badge live">已部署</span>' : ""}
+                ${game.subtitle ? `<span class="badge live">${game.subtitle}</span>` : ""}
               </div>
             </a>
             <div class="content">
@@ -540,7 +548,7 @@
               <p class="desc">${game.description || ""}</p>
               <div class="meta">${tags}</div>
               <div class="actions">
-                <a class="action primary" href="${game.localUrl}" target="_blank" rel="noopener">${icon.play}<span>本地</span></a>
+                <a class="action primary${game.liveUrl ? "" : " wide"}" href="${game.localUrl}">${icon.play}<span>开始玩</span></a>
                 ${liveButton}
               </div>
             </div>
