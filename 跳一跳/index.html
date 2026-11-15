@@ -493,6 +493,9 @@ function stopChargeTone(){
   }
 }
 
+// 蓄力 → 跳跃距离：从几乎为 0 开始线性增长（原版手感），轻点只会原地小跳
+function jumpDist(charge){ return 0.12 + charge * 5.08; }
+
 function doJump(charge){
   const p = G.player;
   const from = p.onBlock;
@@ -504,19 +507,20 @@ function doJump(charge){
   const len = Math.hypot(dx,dz) || 1;
   dx/=len; dz/=len;
   // jump power: charge (0..1) maps to distance
-  const power = 1.0 + charge * 4.2;     // world units of travel
-  const dist = power;
+  const dist = jumpDist(charge);         // world units of travel
   p.vx = dx * dist; p.vz = dz * dist;
   p.vy = 6 + charge*5;                  // hop height feel
   p.jumpFromX = p.x; p.jumpFromZ = p.z;
   p.jumpT = 0;
-  p.jumpDur = 0.34 + charge*0.30;
+  p.jumpDur = 0.26 + charge*0.38;
   p.targetX = p.x + dx*dist;
   p.targetZ = p.z + dz*dist;
   p.startX = p.x; p.startZ = p.z;
   p.fromTop = blockSurfaceH(from);
-  p.toTop = blockSurfaceH(target);
-  p.jumpHeight = 60 + charge*120;
+  // 落点仍在当前方块上时，按当前方块高度落地，避免落地瞬间“掉一截”
+  const staysOnFrom = Math.abs(p.targetX - from.x) <= from.w/2 && Math.abs(p.targetZ - from.z) <= from.d/2;
+  p.toTop = staysOnFrom ? p.fromTop : blockSurfaceH(target);
+  p.jumpHeight = 24 + charge*156;
   G.state = 'jumping';
   G.jumps++;
   Sound.jump();
@@ -1228,7 +1232,7 @@ function drawChargeBar(){
     if(target){
       let dx = target.x-p.x, dz=target.z-p.z;
       const len=Math.hypot(dx,dz)||1; dx/=len; dz/=len;
-      const dist = 1.0 + c*4.2;
+      const dist = jumpDist(c);
       const lx = p.x+dx*dist, lz = p.z+dz*dist;
       const ls = worldToScreen(lx,lz, blockSurfaceH(target));
       ctx.strokeStyle='rgba(255,93,143,0.85)'; ctx.lineWidth=2;
