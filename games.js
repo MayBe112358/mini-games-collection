@@ -33,5 +33,16 @@ const games = [
     emoji: "🐮",
     localUrl: "./一色一牛/index.html",
     thumbnail: "./assets/thumbs/yi-se-yi-niu.png"
+  },
+  {
+    title: "黑白接力",
+    subtitle: "双人接力解谜",
+    description: "黑白两个小人轮流走，只能踩对方的颜色，走过的路变成自己的颜色。互相铺路，一起走到终点，收集三颗星。",
+    category: "益智",
+    tags: ["原生 HTML", "关卡", "三星评分", "移动端"],
+    version: "HTML",
+    emoji: "☯️",
+    localUrl: "./黑白接力/index.html",
+    thumbnail: "./assets/thumbs/hei-bai-jie-li.png"
   }
 ];
