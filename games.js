@@ -7,7 +7,7 @@ const games = [
     tags: ["原生 HTML", "关卡", "道具", "移动端"],
     version: "HTML",
     emoji: "🐑",
-    localUrl: "./羊了个羊/index.html",
+    localUrl: "./san-yang-kai-tai/index.html",
     liveUrl: "https://maybe112358.github.io/san-yang-kai-tai/",
     thumbnail: "./assets/thumbs/san-yang-kai-tai.png"
   },
@@ -19,7 +19,7 @@ const games = [
     tags: ["Canvas", "蓄力", "皮肤", "排行榜"],
     version: "Canvas",
     emoji: "🟦",
-    localUrl: "./跳一跳/index.html",
+    localUrl: "./tiaoyitiao/index.html",
     liveUrl: "https://maybe112358.github.io/tiaoyitiao/",
     thumbnail: "./assets/thumbs/tiaoyitiao.png"
   },
@@ -31,7 +31,8 @@ const games = [
     tags: ["原生 HTML", "关卡", "随机出题", "移动端"],
     version: "HTML",
     emoji: "🐮",
-    localUrl: "./一色一牛/index.html",
+    localUrl: "./yi-se-yi-niu/index.html",
+    liveUrl: "https://maybe112358.github.io/mini-games-collection/yi-se-yi-niu/",
     thumbnail: "./assets/thumbs/yi-se-yi-niu.png"
   },
   {
@@ -42,7 +43,8 @@ const games = [
     tags: ["原生 HTML", "关卡", "三星评分", "移动端"],
     version: "HTML",
     emoji: "☯️",
-    localUrl: "./黑白接力/index.html",
+    localUrl: "./hei-bai-jie-li/index.html",
+    liveUrl: "https://maybe112358.github.io/mini-games-collection/hei-bai-jie-li/",
     thumbnail: "./assets/thumbs/hei-bai-jie-li.png"
   }
 ];
