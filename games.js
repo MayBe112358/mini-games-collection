@@ -32,6 +32,7 @@ const games = [
     version: "HTML",
     emoji: "🐮",
     localUrl: "./一色一牛/index.html",
+    liveUrl: "https://maybe112358.github.io/mini-games-collection/%E4%B8%80%E8%89%B2%E4%B8%80%E7%89%9B/",
     thumbnail: "./assets/thumbs/yi-se-yi-niu.png"
   },
   {
@@ -43,6 +44,7 @@ const games = [
     version: "HTML",
     emoji: "☯️",
     localUrl: "./黑白接力/index.html",
+    liveUrl: "https://maybe112358.github.io/mini-games-collection/%E9%BB%91%E7%99%BD%E6%8E%A5%E5%8A%9B/",
     thumbnail: "./assets/thumbs/hei-bai-jie-li.png"
   }
 ];
