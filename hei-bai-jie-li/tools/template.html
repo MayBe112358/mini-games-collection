@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>黑白接力</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f3efe4; --ink:#1c1b19; --page:#e3ddd0; --frame:#2a2825;
+  --wall:#9c958a; --muted:#6f685d; --gold:#d9a21b; --gold-d:#a8780a;
+  --cell:56px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:var(--page);color:var(--ink);font-family:-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  display:flex;flex-direction:column;align-items:center;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
+.app{width:100%;max-width:480px;padding:16px 16px 24px;display:flex;flex-direction:column;align-items:center;gap:14px;min-height:100%}
+header{width:100%;display:flex;align-items:center;justify-content:space-between}
+.brand{font-family:"Noto Serif SC",serif;font-weight:700;font-size:22px;letter-spacing:2px;display:flex;align-items:center;gap:8px}
+.brand .yy{width:22px;height:22px;border-radius:50%;background:linear-gradient(90deg,var(--ink) 50%,var(--paper) 50%);border:1.5px solid var(--ink)}
+.icon-btn{border:none;background:transparent;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.icon-btn:active{background:rgba(0,0,0,.08)}
+.icon-btn svg{width:22px;height:22px}
+.hud{width:100%;display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--muted)}
+.hud b{color:var(--ink);font-weight:600}
+.stars-hud{display:flex;gap:3px}
+.stars-hud svg{width:18px;height:18px}
+.turn{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;background:var(--paper);border:1px solid rgba(0,0,0,.12);font-size:14px;font-weight:600;transition:all .2s}
+.turn .dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--ink);transition:background .2s}
+.turn.b .dot{background:var(--ink)} .turn.w .dot{background:var(--paper)}
+.board-wrap{position:relative;padding:10px;background:var(--frame);border-radius:14px;box-shadow:0 10px 30px rgba(40,30,10,.18)}
+.board{position:relative;display:grid;gap:3px;touch-action:none}
+.cell{width:var(--cell);height:var(--cell);border-radius:6px;position:relative;transition:background-color .28s ease}
+.cell.w{background:var(--paper)} .cell.k{background:var(--ink);box-shadow:inset 0 0 0 1px #3a3833}
+.cell.wall{background:repeating-linear-gradient(45deg,#5a554d 0 4px,#4a463f 4px 8px)}
+.cell.hint{outline:2px dashed rgba(217,162,27,.9);outline-offset:-5px}
+.mark{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.goal{width:42%;height:42%;transform:rotate(45deg);border-radius:4px}
+.goal.gb{background:var(--ink);box-shadow:0 0 0 2.5px var(--paper),0 0 0 4px var(--ink)}
+.goal.gw{background:var(--paper);box-shadow:0 0 0 2.5px var(--ink),0 0 0 4px var(--paper)}
+.star svg{width:46%;height:46%;filter:drop-shadow(0 1px 0 rgba(0,0,0,.35));transition:transform .3s,opacity .3s}
+.star.got svg{transform:scale(1.8) translateY(-10px);opacity:0}
+.piece{position:absolute;top:0;left:0;width:var(--cell);height:var(--cell);display:grid;place-items:center;pointer-events:none;
+  transition:transform .2s cubic-bezier(.3,.7,.3,1.2)}
+.piece .body{width:74%;height:74%;border-radius:50%;position:relative;transition:transform .2s}
+.piece.b .body{background:var(--ink);box-shadow:0 0 0 2.5px var(--paper),0 4px 6px rgba(0,0,0,.35)}
+.piece.w .body{background:var(--paper);box-shadow:0 0 0 2.5px var(--ink),0 4px 6px rgba(0,0,0,.35)}
+.eye{position:absolute;top:36%;width:12%;height:20%;border-radius:50%;transition:transform .15s}
+.piece.b .eye{background:var(--paper)} .piece.w .eye{background:var(--ink)}
+.eye.l{left:30%}.eye.r{right:30%}
+.piece.active .body{animation:bob 1.1s ease-in-out infinite}
+.piece.active::after{content:"";position:absolute;bottom:2px;width:30%;height:4px;border-radius:4px;background:var(--gold)}
+.piece.done .body::after{content:"";position:absolute;right:-4px;top:-4px;width:14px;height:14px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 2px var(--frame)}
+.piece.shake .body{animation:shake .3s}
+@keyframes bob{50%{transform:translateY(-3px)}}
+@keyframes shake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.msg{min-height:22px;font-size:14px;color:var(--muted);text-align:center}
+.msg.bad{color:#a3321f;font-weight:600}
+.controls{display:flex;gap:10px;width:100%;justify-content:center}
+.btn{border:none;border-radius:12px;padding:11px 18px;font-size:15px;font-weight:600;cursor:pointer;background:var(--paper);color:var(--ink);box-shadow:0 1px 0 rgba(0,0,0,.15),inset 0 0 0 1px rgba(0,0,0,.08);display:flex;align-items:center;gap:6px}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn:disabled{opacity:.4}
+.btn svg{width:18px;height:18px}
+.pad{display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,50px);gap:6px}
+.pad button{border:none;border-radius:12px;background:rgba(255,255,255,.55);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.pad button:active{background:rgba(0,0,0,.1)}
+.pad svg{width:22px;height:22px}
+.tip{font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+.overlay{position:fixed;inset:0;background:rgba(28,27,25,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:10}
+.overlay.on{display:flex}
+.sheet{background:var(--paper);border-radius:18px;padding:22px 20px;width:100%;max-width:380px;text-align:center;animation:pop .25s ease-out}
+@keyframes pop{from{transform:scale(.9);opacity:0}}
+.sheet h2{font-family:"Noto Serif SC",serif;margin:0 0 6px;font-size:22px}
+.sheet p{margin:6px 0;color:var(--muted);font-size:14px;line-height:1.7}
+.big-stars{display:flex;justify-content:center;gap:8px;margin:14px 0 8px}
+.big-stars svg{width:44px;height:44px}
+.big-stars svg.on{animation:spin .5s ease-out backwards}
+.big-stars svg:nth-child(2){animation-delay:.12s}.big-stars svg:nth-child(3){animation-delay:.24s}
+@keyframes spin{from{transform:scale(0) rotate(-90deg)}}
+.sheet .row{display:flex;gap:10px;justify-content:center;margin-top:16px}
+.rules{text-align:left;margin:12px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.rules li{display:flex;gap:10px;font-size:14px;line-height:1.6;color:var(--ink)}
+.rules .n{flex:none;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--paper);font-size:12px;display:grid;place-items:center;margin-top:1px}
+.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+.lv{aspect-ratio:1;border:none;border-radius:12px;background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:17px;font-weight:700;color:var(--ink)}
+.lv.cur{box-shadow:inset 0 0 0 2px var(--ink)}
+.lv.locked{opacity:.35;cursor:default}
+.lv .s{display:flex;gap:1px}.lv .s svg{width:11px;height:11px}
+.tiers{display:flex;gap:6px;overflow-x:auto;margin:12px -4px 0;padding:2px 4px 4px;scrollbar-width:none}
+.tiers::-webkit-scrollbar{display:none}
+.tier{flex:1 0 auto;border:none;border-radius:999px;padding:7px 8px;font-size:14px;font-weight:600;background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
+.tier small{font-size:11px;font-weight:500;color:var(--muted)}
+.tier.on{background:var(--ink);color:var(--paper)} .tier.on small{color:#bdb6a8}
+.tier-desc{font-size:13px;color:var(--muted);margin:8px 0 0;min-height:20px}
+.lv-scroll{max-height:min(52vh,420px);overflow-y:auto;margin-top:10px;padding:2px}
+.lv-scroll .levels{margin-top:0;grid-template-columns:repeat(5,1fr);gap:8px}
+.lv{font-size:15px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><span class="yy"></span>黑白接力</div>
+    <div style="display:flex;gap:2px">
+      <button class="icon-btn" id="btnHelp" aria-label="规则"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg></button>
+      <button class="icon-btn" id="btnLevels" aria-label="选关"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg></button>
+    </div>
+  </header>
+  <div class="hud">
+    <span><b id="lvNum">入门 1</b> · <b id="moves">0</b> 步</span>
+    <div class="turn b" id="turn"><span class="dot"></span><span id="turnTxt">轮到黑</span></div>
+    <span class="stars-hud" id="starsHud"></span>
+  </div>
+  <div class="board-wrap"><div class="board" id="board"></div></div>
+  <div class="msg" id="msg">滑动棋盘、点相邻格子或用方向键移动</div>
+  <div class="controls">
+    <button class="btn" id="btnUndo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>撤销</button>
+    <button class="btn" id="btnReset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>重开</button>
+  </div>
+  <div class="pad">
+    <span></span>
+    <button data-d="0" aria-label="上"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></svg></button>
+    <span></span>
+    <button data-d="3" aria-label="左"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg></button>
+    <button data-d="2" aria-label="下"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button data-d="1" aria-label="右"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></button>
+  </div>
+  <div class="tip">键盘：方向键 / WASD 移动，Z 撤销，R 重开</div>
+</div>
+
+<div class="overlay" id="ovHelp"><div class="sheet">
+  <h2>规则</h2>
+  <ul class="rules">
+    <li><span class="n">1</span><span>黑小人只能走上<b>白格</b>，白小人只能走上<b>黑格</b>。走过的格子会变成自己的颜色。</span></li>
+    <li><span class="n">2</span><span>两人<b>轮流</b>走，黑先手。轮到谁谁就必须走一步，不能进入对方所在的格子。</span></li>
+    <li><span class="n">3</span><span>小人走到自己颜色的<b>菱形终点</b>后就停下，之后只轮另一个走。两人都到达即过关。</span></li>
+    <li><span class="n">4</span><span>任一小人踩到<b>星星</b>就能收集。拿满三颗星才算完美通关。</span></li>
+  </ul>
+  <p style="margin-top:12px">轮到的人无路可走就卡住了，用“撤销”退回去。</p>
+  <div class="row"><button class="btn primary" id="btnHelpOk">开始</button></div>
+</div></div>
+
+<div class="overlay" id="ovWin"><div class="sheet">
+  <h2 id="winTitle">过关</h2>
+  <div class="big-stars" id="winStars"></div>
+  <p id="winText"></p>
+  <div class="row"><button class="btn" id="btnRetry">再试一次</button><button class="btn primary" id="btnNext">下一关</button></div>
+</div></div>
+
+<div class="overlay" id="ovLevels"><div class="sheet">
+  <h2>选择关卡</h2>
+  <p id="totalStars"></p>
+  <div class="tiers" id="tierTabs"></div>
+  <div class="tier-desc" id="tierDesc"></div>
+  <div class="lv-scroll" id="lvScroll"><div class="levels" id="levelGrid"></div></div>
+  <div class="row"><button class="btn" id="btnLvClose">关闭</button></div>
+</div></div>
+
+<script>
+const TIERS = __TIERS__;
+const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
+const STAR = on => `<svg viewBox="0 0 24 24"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z" fill="${on?'var(--gold)':'rgba(0,0,0,.14)'}" stroke="${on?'var(--gold-d)':'none'}" stroke-width="1" stroke-linejoin="round"/></svg>`;
+
+const store = {
+  get(){ try{ return JSON.parse(localStorage.getItem('bwrelay2')||'{}') }catch(e){ return {} } },
+  set(v){ try{ localStorage.setItem('bwrelay2', JSON.stringify(v)) }catch(e){} }
+};
+let save = store.get(); save.best = save.best || {};
+let ti = 0, viewTier = 0;
+const key = (t,i) => t+'-'+i;
+
+let li = 0, lv, S, hist, ended;
+const $ = id => document.getElementById(id);
+const board = $('board');
+let cellEls = [], pieceB, pieceW, starEls = {};
+
+function stateInit(){
+  const cells = lv.c.split('').map(ch => ch==='#'?'#':ch==='x'?'k':'w');
+  cells[lv.bs]='k'; cells[lv.ws]='w';
+  const got = lv.st.map(s => s===lv.bs || s===lv.ws);
+  return {cells, b:lv.bs, w:lv.ws, turn:0, got, moves:0};
+}
+const clone = s => ({cells:s.cells.slice(), b:s.b, w:s.w, turn:s.turn, got:s.got.slice(), moves:s.moves});
+const lockedB = s => s.b===lv.bg, lockedW = s => s.w===lv.wg;
+function mover(s){ let t=s.turn; if(t===0&&lockedB(s)) t=1; if(t===1&&lockedW(s)) t=0; return t; }
+function nb(i,d){ const x=i%lv.w+DIRS[d][0], y=Math.floor(i/lv.w)+DIRS[d][1];
+  if(x<0||y<0||x>=lv.w||y>=lv.h) return -1; const n=y*lv.w+x; return S.cells[n]==='#'?-1:n; }
+function legal(s,d){ const t=mover(s), cur=t?s.w:s.b, oth=t?s.b:s.w, n=nb(cur,d);
+  if(n<0||n===oth) return -1; if(t===0&&s.cells[n]!=='w') return -1; if(t===1&&s.cells[n]!=='k') return -1; return n; }
+const anyLegal = s => [0,1,2,3].some(d=>legal(s,d)>=0);
+const won = s => lockedB(s)&&lockedW(s);
+
+function loadLevel(t,i){
+  ti=t; li=i; lv=TIERS[t].levels[i]; S=stateInit(); hist=[]; ended=false;
+  const avail = Math.min(window.innerWidth,480)-32-20;
+  const cs = Math.max(40, Math.min(66, Math.floor((avail-(lv.w-1)*3)/lv.w)));
+  document.documentElement.style.setProperty('--cell', cs+'px');
+  board.style.gridTemplateColumns = `repeat(${lv.w}, var(--cell))`;
+  board.innerHTML=''; cellEls=[]; starEls={};
+  for(let k=0;k<lv.w*lv.h;k++){
+    const c=document.createElement('div'); c.className='cell'; c.dataset.i=k;
+    if(k===lv.bg||k===lv.wg){ const m=document.createElement('div'); m.className='mark'; m.innerHTML=`<div class="goal ${k===lv.bg?'gb':'gw'}"></div>`; c.appendChild(m); }
+    const si=lv.st.indexOf(k);
+    if(si>=0){ const m=document.createElement('div'); m.className='mark star'; m.innerHTML=STAR(true); c.appendChild(m); starEls[si]=m; }
+    board.appendChild(c); cellEls.push(c);
+  }
+  pieceB=mkPiece('b'); pieceW=mkPiece('w');
+  $('lvNum').textContent=TIERS[t].name+' '+(i+1);
+  save.last=[t,i]; store.set(save);
+  setMsg(t===0&&i===0?'黑先走：把黑小人往右挪一格试试':'滑动棋盘、点相邻格子或用方向键移动');
+  render(true);
+}
+function mkPiece(c){ const p=document.createElement('div'); p.className='piece '+c;
+  p.innerHTML='<div class="body"><span class="eye l"></span><span class="eye r"></span></div>'; board.appendChild(p); return p; }
+function place(p,i,dir){ const cs=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell')), g=3;
+  p.style.transform=`translate(${(i%lv.w)*(cs+g)}px,${Math.floor(i/lv.w)*(cs+g)}px)`;
+  if(dir!=null){ const e=p.querySelectorAll('.eye'); const [dx,dy]=DIRS[dir]; e.forEach(x=>x.style.transform=`translate(${dx*3}px,${dy*3}px)`); } }
+
+function render(instant, lastDir){
+  S.cells.forEach((c,k)=>{ cellEls[k].className='cell '+(c==='#'?'wall':c); });
+  lv.st.forEach((s,k)=>starEls[k].classList.toggle('got', S.got[k]));
+  if(instant){ pieceB.style.transition=pieceW.style.transition='none'; }
+  const t=mover(S);
+  place(pieceB,S.b,t===1?lastDir:null); place(pieceW,S.w,t===0?lastDir:null);
+  if(instant){ requestAnimationFrame(()=>{ pieceB.style.transition=pieceW.style.transition=''; }); }
+  const w=won(S);
+  pieceB.classList.toggle('active',!w&&t===0); pieceW.classList.toggle('active',!w&&t===1);
+  pieceB.classList.toggle('done',lockedB(S)); pieceW.classList.toggle('done',lockedW(S));
+  const tu=$('turn'); tu.className='turn '+(t?'w':'b'); $('turnTxt').textContent=w?'完成':(t?'轮到白':'轮到黑');
+  $('moves').textContent=S.moves;
+  $('starsHud').innerHTML=S.got.map(STAR).join('');
+  $('btnUndo').disabled=!hist.length;
+}
+function setMsg(t,bad){ const m=$('msg'); m.textContent=t; m.className='msg'+(bad?' bad':''); }
+
+function move(d){
+  if(ended) return;
+  const n=legal(S,d), t=mover(S);
+  if(n<0){ const p=t?pieceW:pieceB; p.classList.remove('shake'); void p.offsetWidth; p.classList.add('shake');
+    const target=nb(t?S.w:S.b,d);
+    if(target>=0 && target===(t?S.b:S.w)) setMsg('被对方挡住了');
+    else if(target>=0) setMsg(t?'白小人只能走黑格':'黑小人只能走白格');
+    return; }
+  hist.push(clone(S));
+  if(t===0){ S.b=n; S.cells[n]='k'; } else { S.w=n; S.cells[n]='w'; }
+  lv.st.forEach((s,k)=>{ if(s===n) S.got[k]=true; });
+  S.turn=1-t; S.moves++;
+  render(false,d);
+  if(won(S)){ ended=true; setMsg('两人都到达终点'); setTimeout(win,380); return; }
+  if(!anyLegal(S)){ setMsg((mover(S)?'白':'黑')+'无路可走了，撤销一步或重开',true); }
+  else if(t===0&&lockedB(S)) setMsg('黑到达终点，接下来只轮白走');
+  else if(t===1&&lockedW(S)) setMsg('白到达终点，接下来只轮黑走');
+  else setMsg('');
+}
+function undo(){ if(!hist.length) return; S=hist.pop(); ended=false; render(false); setMsg(''); }
+function reset(){ if(!hist.length) return; S=stateInit(); hist=[]; ended=false; render(true); setMsg(''); }
+
+function win(){
+  const n=S.got.filter(Boolean).length, k=key(ti,li), prev=save.best[k];
+  if(!prev || n>prev.s || (n===prev.s && S.moves<prev.m)) save.best[k]={s:n,m:S.moves};
+  store.set(save);
+  $('winTitle').textContent = n===3?'完美通关':'过关';
+  $('winStars').innerHTML=[0,1,2].map(k=>STAR(k<n).replace('<svg','<svg class="'+(k<n?'on':'')+'"')).join('');
+  let t=`用了 ${S.moves} 步，拿到 ${n} 颗星。`;
+  if(n<3) t+='还有星星没拿到，换个顺序试试？';
+  else if(S.moves>lv.L) t+=`满星最短只要 ${lv.L} 步，挑战一下？`;
+  else t+='已经是满星最短步数。';
+  $('winText').textContent=t;
+  const nx=nextOf(ti,li);
+  $('btnNext').textContent = !nx?'全部完成':(nx[0]!==ti?'进入'+TIERS[nx[0]].name:'下一关');
+  $('ovWin').classList.add('on');
+}
+function nextOf(t,i){ if(i<TIERS[t].levels.length-1) return [t,i+1]; if(t<TIERS.length-1) return [t+1,0]; return null; }
+function unlocked(t,i){ return i===0 || !!save.best[key(t,i-1)] || !!save.best[key(t,i)]; }
+function tierStars(t){ let s=0; TIERS[t].levels.forEach((_,i)=>{ const b=save.best[key(t,i)]; if(b) s+=b.s; }); return s; }
+function showLevels(){
+  let tot=0, all=0, n=0; TIERS.forEach((T,t)=>{ tot+=tierStars(t); all+=T.levels.length*3; n+=T.levels.length; });
+  $('totalStars').textContent=`共 ${n} 关 · 已收集 ${tot} / ${all} 颗星`;
+  viewTier=ti; renderTabs(); renderGrid(true);
+  $('ovLevels').classList.add('on');
+}
+function renderTabs(){
+  const box=$('tierTabs'); box.innerHTML='';
+  TIERS.forEach((T,t)=>{ const b=document.createElement('button'); b.className='tier'+(t===viewTier?' on':'');
+    b.innerHTML=`${T.name}<small>${tierStars(t)}/${T.levels.length*3}</small>`;
+    b.onclick=()=>{ viewTier=t; renderTabs(); renderGrid(false); }; box.appendChild(b); });
+  $('tierDesc').textContent=TIERS[viewTier].desc;
+}
+function renderGrid(scrollToCur){
+  const g=$('levelGrid'); g.innerHTML=''; let curEl=null;
+  TIERS[viewTier].levels.forEach((_,i)=>{ const b=document.createElement('button'); const ok=unlocked(viewTier,i), best=save.best[key(viewTier,i)];
+    const cur=viewTier===ti&&i===li; b.className='lv'+(cur?' cur':'')+(ok?'':' locked');
+    b.innerHTML=`<span>${i+1}</span><span class="s">${[0,1,2].map(k=>STAR(best&&k<best.s)).join('')}</span>`;
+    if(ok) b.onclick=()=>{ $('ovLevels').classList.remove('on'); loadLevel(viewTier,i); };
+    if(cur) curEl=b; g.appendChild(b); });
+  const sc=$('lvScroll'); sc.scrollTop=0;
+  if(scrollToCur&&curEl) requestAnimationFrame(()=>{ sc.scrollTop=Math.max(0,curEl.offsetTop-sc.clientHeight/2); });
+}
+
+/* 输入 */
+document.querySelectorAll('.pad button').forEach(b=>b.addEventListener('click',()=>move(+b.dataset.d)));
+$('btnUndo').onclick=undo; $('btnReset').onclick=reset;
+$('btnHelp').onclick=()=>$('ovHelp').classList.add('on');
+$('btnHelpOk').onclick=()=>{ $('ovHelp').classList.remove('on'); save.seenHelp=1; store.set(save); };
+$('btnLevels').onclick=showLevels; $('btnLvClose').onclick=()=>$('ovLevels').classList.remove('on');
+$('btnRetry').onclick=()=>{ $('ovWin').classList.remove('on'); loadLevel(ti,li); };
+$('btnNext').onclick=()=>{ $('ovWin').classList.remove('on'); const nx=nextOf(ti,li); if(nx) loadLevel(nx[0],nx[1]); else showLevels(); };
+document.addEventListener('keydown',e=>{
+  if(document.querySelector('.overlay.on')) return;
+  const k=e.key.toLowerCase(), map={arrowup:0,w:0,arrowright:1,d:1,arrowdown:2,s:2,arrowleft:3,a:3};
+  if(k in map){ e.preventDefault(); move(map[k]); } else if(k==='z'||k==='backspace') undo(); else if(k==='r') reset();
+});
+let sx=null, sy=null, swiped=false;
+board.addEventListener('pointerdown',e=>{ sx=e.clientX; sy=e.clientY; swiped=false; });
+board.addEventListener('pointermove',e=>{ if(sx==null||swiped) return; const dx=e.clientX-sx, dy=e.clientY-sy;
+  if(Math.max(Math.abs(dx),Math.abs(dy))>28){ swiped=true; move(Math.abs(dx)>Math.abs(dy)?(dx>0?1:3):(dy>0?2:0)); } });
+board.addEventListener('pointerup',e=>{
+  if(sx!=null && !swiped){ const c=e.target.closest('.cell'); if(c){ const i=+c.dataset.i, t=mover(S), cur=t?S.w:S.b;
+      for(let d=0;d<4;d++) if(nb(cur,d)===i||(()=>{const x=cur%lv.w+DIRS[d][0],y=Math.floor(cur/lv.w)+DIRS[d][1];return x>=0&&y>=0&&x<lv.w&&y<lv.h&&y*lv.w+x===i})()){ move(d); break; } } }
+  sx=sy=null; });
+window.addEventListener('resize',()=>{ const keep=S, h=hist, e=ended; loadLevel(ti,li); S=keep; hist=h; ended=e; render(true); });
+
+(()=>{ const l=Array.isArray(save.last)?save.last:[0,0]; const t=Math.min(l[0]|0,TIERS.length-1); loadLevel(t, Math.min(l[1]|0, TIERS[t].levels.length-1)); })();
+if(!save.seenHelp) $('ovHelp').classList.add('on');
+</script>
+</body>
+</html>
