@@ -23,7 +23,7 @@ for t in T:
     out.append(dict(name=t['name'], desc=t['desc'], levels=lv))
 # 250 关首版的顺序，用于把旧存档（档-序号）迁移成 ID；之后不要改这个文件
 old = json.load(open('old_order_v1.json'))
-html = open('template.html').read()
+html = open('template.html').read().replace('__SOUND__', open('sound.js').read())
 html = html.replace('__TIERS__', json.dumps(out, ensure_ascii=False, separators=(',', ':')))
 html = html.replace('__OLD_ORDER__', json.dumps(old, separators=(',', ':')))
 open(sys.argv[1] if len(sys.argv) > 1 else 'index.html', 'w').write(html)
