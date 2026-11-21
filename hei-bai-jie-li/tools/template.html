@@ -235,6 +235,47 @@ const Haptic = (() => {
   return { play, set(v) { on = v; }, supported: canVibrate || !!iosLabel,
     defer(v) { deferring = v; }, flush() { const d = deferred; deferred = null; if (d) play(d); } };
 })();
+/* ===== 画面反馈：涟漪、星星迸发、过关光晕；不能震动的设备（如 iPhone）再加上棋盘“震感”代替震动 ===== */
+const Visual = (() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let quake = false;                       // 是否用棋盘晃动代替震动
+  const wrap = () => document.querySelector('.board-wrap'), board = () => document.getElementById('board');
+  const anim = (el, kf, o) => { try { return el.animate(kf, o); } catch (e) { return null; } };
+  const DXY = [[0,-1],[1,0],[0,1],[-1,0]];
+  function center(i) { const c = cellEls[i]; return c ? [c.offsetLeft + c.offsetWidth / 2, c.offsetTop + c.offsetHeight / 2, c.offsetWidth] : null; }
+  function blob(x, y, css) { const e = document.createElement('div');
+    e.style.cssText = `position:absolute;left:${x}px;top:${y}px;pointer-events:none;z-index:5;` + css; board().appendChild(e); return e; }
+  function ripple(i, color) { const p = center(i); if (!p) return; const s = p[2] * .9;
+    const e = blob(p[0] - s / 2, p[1] - s / 2, `width:${s}px;height:${s}px;border-radius:50%;border:2.5px solid ${color}`);
+    const a = anim(e, [{ transform: 'scale(.35)', opacity: .9 }, { transform: 'scale(1.25)', opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
+    a ? a.onfinish = () => e.remove() : e.remove(); }
+  function burst(i, n, dist) { const p = center(i); if (!p) return;
+    for (let k = 0; k < n; k++) { const ang = (k / n) * Math.PI * 2 + Math.random() * .5, r = dist * (.7 + Math.random() * .5), sz = 10 + Math.random() * 6;
+      const e = blob(p[0] - sz / 2, p[1] - sz / 2, `width:${sz}px;height:${sz}px;background:var(--gold);clip-path:polygon(50% 0,61% 38%,100% 50%,61% 62%,50% 100%,39% 62%,0 50%,39% 38%)`);
+      const a = anim(e, [{ transform: 'translate(0,0) scale(1) rotate(0)', opacity: 1 },
+        { transform: `translate(${Math.cos(ang) * r}px,${Math.sin(ang) * r}px) scale(.3) rotate(${180 + Math.random() * 180}deg)`, opacity: 0 }],
+        { duration: 560 + Math.random() * 200, easing: 'cubic-bezier(.15,.8,.3,1)' });
+      a ? a.onfinish = () => e.remove() : e.remove(); } }
+  function glow(color, ms) { anim(wrap(), [{ boxShadow: `0 0 0 0 ${color}` }, { boxShadow: `0 0 0 10px transparent` }], { duration: ms, easing: 'ease-out' }); }
+  function nudge(d, px, ms) { if (reduce) return; const [x, y] = DXY[d];
+    anim(wrap(), [{ transform: 'translate(0,0)' }, { transform: `translate(${x * px}px,${y * px}px)` }, { transform: 'translate(0,0)' }], { duration: ms, easing: 'ease-out' }); }
+  function shake(px, ms, n) { if (reduce) return; const kf = [{ transform: 'translateX(0)' }];
+    for (let k = 1; k <= n; k++) kf.push({ transform: `translateX(${(k % 2 ? 1 : -1) * px * (1 - k / (n + 1))}px)` });
+    kf.push({ transform: 'translateX(0)' }); anim(wrap(), kf, { duration: ms, easing: 'ease-out' }); }
+  function hudStar(k) { const s = document.querySelectorAll('#starsHud svg')[k]; if (s) anim(s, [{ transform: 'scale(1)' }, { transform: 'scale(1.7)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'cubic-bezier(.3,1.6,.5,1)' }); }
+  return {
+    set(v) { quake = v; },
+    move(i, d, white) { ripple(i, white ? 'var(--ink)' : 'var(--paper)'); if (quake) nudge(d, 3, 140); },
+    star(i, k) { burst(i, 10, 46); hudStar(k); glow('rgba(217,162,27,.55)', 520); if (quake) nudge(2, 4, 180); },
+    bad(d) { if (quake) nudge(d, 5, 160); },
+    stuck() { glow('rgba(200,70,50,.6)', 700); if (quake) shake(9, 520, 6); },
+    undo() { if (quake) nudge(0, -2, 120); },
+    win(stars) { if (!reduce) anim(wrap(), [{ transform: 'scale(1)' }, { transform: 'scale(1.035)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'cubic-bezier(.3,1.5,.5,1)' });
+      glow('rgba(217,162,27,.7)', 900);
+      if (stars === 3) { const cells = cellEls.map((c, i) => i).filter(i => S.cells[i] !== '#');
+        [0, 160, 320].forEach(dt => setTimeout(() => burst(cells[Math.floor(Math.random() * cells.length)], 12, 70), dt)); } },
+  };
+})();
 const TIERS = __TIERS__;
 const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
 const STAR = on => `<svg viewBox="0 0 24 24"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z" fill="${on?'var(--gold)':'var(--line)'}" stroke="${on?'var(--gold-d)':'none'}" stroke-width="1" stroke-linejoin="round"/></svg>`;
@@ -332,7 +373,7 @@ function move(d){
   const n=legal(S,d), t=mover(S);
   if(n<0){ const p=t?pieceW:pieceB; p.classList.remove('shake'); void p.offsetWidth; p.classList.add('shake');
     const target=nb(t?S.w:S.b,d);
-    Sound.fx.bad(); Haptic.play('bad');
+    Sound.fx.bad(); Haptic.play('bad'); Visual.bad(d);
     if(target>=0 && target===(t?S.b:S.w)) setMsg('被对方挡住了');
     else if(target>=0) setMsg(t?'白小人只能走黑格':'黑小人只能走白格');
     return; }
@@ -342,20 +383,21 @@ function move(d){
   S.turn=1-t; S.moves++;
   Sound.fx.move(t===1); if(gotStar) Sound.fx.star();
   Haptic.play(gotStar?'star':'move');
+  Visual.move(n,d,t===1); if(gotStar) Visual.star(n, lv.st.indexOf(n));
   render(false,d);
   if(won(S)){ ended=true; setMsg('两人都到达终点'); setTimeout(win,380); return; }
-  if(!anyLegal(S)){ Sound.fx.stuck(); setTimeout(()=>Haptic.play('stuck'),120); setMsg((mover(S)?'白':'黑')+'无路可走了，撤销一步或重开',true); }
+  if(!anyLegal(S)){ Sound.fx.stuck(); setTimeout(()=>Haptic.play('stuck'),120); Visual.stuck(); setMsg((mover(S)?'白':'黑')+'无路可走了，撤销一步或重开',true); }
   else if(t===0&&lockedB(S)) setMsg('黑到达终点，接下来只轮白走');
   else if(t===1&&lockedW(S)) setMsg('白到达终点，接下来只轮黑走');
   else setMsg('');
 }
-function undo(){ if(!hist.length) return; Sound.fx.undo(); Haptic.play('undo'); S=hist.pop(); ended=false; render(false); setMsg(''); }
+function undo(){ if(!hist.length) return; Sound.fx.undo(); Haptic.play('undo'); Visual.undo(); S=hist.pop(); ended=false; render(false); setMsg(''); }
 function reset(){ if(!hist.length) return; S=stateInit(); hist=[]; ended=false; render(true); setMsg(''); }
 
 function win(){
   const n=S.got.filter(Boolean).length, k=key(ti,li), prev=save.best[k];
   if(!prev || n>prev.s || (n===prev.s && S.moves<prev.m)) save.best[k]={s:n,m:S.moves};
-  store.set(save); Sound.fx.win(n); Haptic.play(n===3?'win3':'win1');
+  store.set(save); Sound.fx.win(n); Haptic.play(n===3?'win3':'win1'); Visual.win(n);
   $('winTitle').textContent = n===3?'完美通关':'过关';
   $('winStars').innerHTML=[0,1,2].map(k=>STAR(k<n).replace('<svg','<svg class="'+(k<n?'on':'')+'"')).join('');
   let t=`用了 ${S.moves} 步，拿到 ${n} 颗星。`;
@@ -400,7 +442,11 @@ $('btnUndo').onclick=undo; $('btnReset').onclick=reset;
 /* 声音设置 */
 save.sound = Object.assign({music:true, sfx:true, vol:.7, vib:true}, save.sound||{});
 Sound.setCfg(save.sound); Haptic.set(save.sound.vib);
-if(!Haptic.supported) $('rowVib').style.display='none';
+if(!Haptic.supported){
+  $('rowVib').firstElementChild.innerHTML='画面震感<small>这台设备的网页无法震动，用棋盘晃动代替</small>';
+  $('swVib').setAttribute('aria-label','画面震感');
+}
+Visual.set(!Haptic.supported && save.sound.vib);
 function syncSoundUI(){ const s=save.sound;
   $('swMusic').setAttribute('aria-checked', s.music); $('swSfx').setAttribute('aria-checked', s.sfx); $('swVib').setAttribute('aria-checked', s.vib);
   $('vol').value=Math.round(s.vol*100); $('btnSound').classList.toggle('muted', !s.music && !s.sfx || s.vol===0); }
@@ -409,7 +455,8 @@ $('btnSound').onclick=()=>{ Sound.ensure(); syncSoundUI(); $('ovSound').classLis
 $('btnSoundOk').onclick=()=>$('ovSound').classList.remove('on');
 $('swMusic').onclick=()=>{ Sound.ensure(); setSound({music:!save.sound.music}); };
 $('swSfx').onclick=()=>{ Sound.ensure(); setSound({sfx:!save.sound.sfx}); };
-$('swVib').onclick=()=>{ setSound({vib:!save.sound.vib}); Haptic.set(save.sound.vib); Haptic.play('star'); };
+$('swVib').onclick=()=>{ setSound({vib:!save.sound.vib}); Haptic.set(save.sound.vib); Visual.set(!Haptic.supported && save.sound.vib);
+  if(save.sound.vib){ Haptic.play('star'); Visual.bad(1); } };
 $('vol').oninput=e=>setSound({vol:e.target.value/100});
 syncSoundUI();
 // 浏览器要求用户先有操作才能出声：第一次点击/按键时启动
