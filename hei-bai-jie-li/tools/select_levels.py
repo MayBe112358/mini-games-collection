@@ -1,4 +1,6 @@
-"""从候选池里按难度分档挑关卡，输出 tiers.json"""
+"""从候选池里按难度分档挑关卡
+python3 select_levels.py            从头生成 tiers.json（会打乱已发布的关卡顺序，只在第一次用）
+python3 select_levels.py --add 10   在现有 tiers.json 上每档追加 10 关（以后加关用这个）"""
 import json, random
 from post import load
 
@@ -17,7 +19,7 @@ TIERS = [
 ]
 
 def score(o):
-    return o['crit'] + 0.2 * o['L'] + 3 * (1 - o['good'])
+    return o.get('crit', 0) + 0.2 * o.get('L', 0) + 3 * (1 - o.get('good', 1))
 
 def pick(pool, n, rng):
     """按难度排序后等距抽样，同时尽量让棋盘尺寸多样"""
@@ -35,7 +37,31 @@ def pick(pool, n, rng):
         chosen.append(seg[0]); used.add(id(seg[0]))
     return sorted(chosen, key=score)
 
+def add_levels(n_per_tier, rng):
+    """在已发布的 tiers.json 上追加新关：旧关卡一个都不改，新关按难度插到各档合适位置。
+    存档按关卡 ID 记录，所以插入不会让玩家进度错位。"""
+    from post import canon
+    T = json.load(open('tiers.json'))
+    have = {canon(l) for t in T for l in t['levels']}
+    allc = [o for o in load() if canon(o) not in have]
+    taken = set()
+    for (name, desc, n, f), tier in zip(TIERS, T):
+        pool = [o for o in allc if f(o) and id(o) not in taken]
+        new = pick(pool, n_per_tier, rng)
+        for o in new: taken.add(id(o))
+        lv = tier['levels']
+        for o in sorted(new, key=score):
+            # 插在第一个比它难的旧关前面（第 1 关始终保留在最前）
+            pos = next((i for i in range(1, len(lv)) if score(lv[i]) > score(o)), len(lv))
+            lv.insert(pos, o)
+        print(name, '+%d' % len(new), '->', len(lv))
+    json.dump(T, open('tiers.json', 'w'))
+
 if __name__ == '__main__':
+    import sys
+    if len(sys.argv) == 3 and sys.argv[1] == '--add':
+        add_levels(int(sys.argv[2]), random.Random())
+        sys.exit()
     rng = random.Random(2026)
     allc = load()
     print('candidates', len(allc))
