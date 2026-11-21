@@ -200,15 +200,21 @@ input[type=range]{width:150px;accent-color:var(--gold)}
 
 <script>
 __SOUND__
-/* ===== 震动反馈：安卓用 navigator.vibrate；iPhone（iOS 18+ Safari）借系统开关控件触发轻触感 ===== */
+/* ===== 震动反馈：安卓用 navigator.vibrate；iPhone 借系统开关控件触发轻触感。
+   注意：苹果在 iOS 26.5 堵上了这个办法，iPhone 上网页从此无法震动，只有 iOS 17.4–26.4 有效 ===== */
 const Haptic = (() => {
   const canVibrate = typeof navigator.vibrate === 'function';
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let on = true, iosLabel = null;
-  if (!canVibrate && isIOS) {
+  // iOS 版本：优先看 Safari 的 Version/x.y，没有就看系统版本 OS x_y
+  const vm = /Version\/(\d+)\.(\d+)/.exec(navigator.userAgent) || /OS (\d+)_(\d+)/.exec(navigator.userAgent);
+  const iosVer = vm ? (+vm[1]) + (+vm[2]) / 100 : 0;
+  const iosOk = isIOS && iosVer >= 17.04 && iosVer < 26.05;
+  let on = true, iosLabel = null, deferred = null, deferring = false;
+  if (!canVibrate && iosOk) {
     iosLabel = document.createElement('label');
     iosLabel.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
-    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1; inp.id = 'hapticSwitch';
+    iosLabel.htmlFor = 'hapticSwitch'; iosLabel.setAttribute('aria-hidden', 'true');
     iosLabel.appendChild(inp);
     const add = () => document.body.appendChild(iosLabel);
     document.body ? add() : document.addEventListener('DOMContentLoaded', add);
@@ -218,13 +224,16 @@ const Haptic = (() => {
               undo: [6], win1: [20, 60, 30], win3: [20, 60, 20, 60, 20, 60, 70] };
   function play(name) {
     if (!on) return; const p = P[name]; if (!p) return;
+    // iPhone 只在“点按/松手”这类操作里允许触感；滑动途中先记下，松手时再触发
+    if (deferring && iosLabel) { if (!deferred || p.length > P[deferred].length) deferred = name; return; }
     try {
       if (canVibrate) { navigator.vibrate(p); return; }
       if (iosLabel) for (let k = 0; k < p.length; k += 2) { const d = p.slice(0, k).reduce((a, b) => a + b, 0);
         d ? setTimeout(() => iosLabel.click(), d) : iosLabel.click(); }
     } catch (e) {}
   }
-  return { play, set(v) { on = v; }, supported: canVibrate || isIOS };
+  return { play, set(v) { on = v; }, supported: canVibrate || !!iosLabel,
+    defer(v) { deferring = v; }, flush() { const d = deferred; deferred = null; if (d) play(d); } };
 })();
 const TIERS = __TIERS__;
 const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
@@ -424,11 +433,12 @@ document.addEventListener('keydown',e=>{
 let sx=null, sy=null, swiped=false;
 board.addEventListener('pointerdown',e=>{ sx=e.clientX; sy=e.clientY; swiped=false; });
 board.addEventListener('pointermove',e=>{ if(sx==null||swiped) return; const dx=e.clientX-sx, dy=e.clientY-sy;
-  if(Math.max(Math.abs(dx),Math.abs(dy))>28){ swiped=true; move(Math.abs(dx)>Math.abs(dy)?(dx>0?1:3):(dy>0?2:0)); } });
+  if(Math.max(Math.abs(dx),Math.abs(dy))>28){ swiped=true; Haptic.defer(true); move(Math.abs(dx)>Math.abs(dy)?(dx>0?1:3):(dy>0?2:0)); } });
 board.addEventListener('pointerup',e=>{
   if(sx!=null && !swiped){ const c=e.target.closest('.cell'); if(c){ const i=+c.dataset.i, t=mover(S), cur=t?S.w:S.b;
       for(let d=0;d<4;d++) if(nb(cur,d)===i||(()=>{const x=cur%lv.w+DIRS[d][0],y=Math.floor(cur/lv.w)+DIRS[d][1];return x>=0&&y>=0&&x<lv.w&&y<lv.h&&y*lv.w+x===i})()){ move(d); break; } } }
-  sx=sy=null; });
+  sx=sy=null; Haptic.defer(false); Haptic.flush(); });
+board.addEventListener('pointercancel',()=>{ sx=sy=null; Haptic.defer(false); Haptic.flush(); });
 window.addEventListener('resize',()=>{ const keep=S, h=hist, e=ended; loadLevel(ti,li); S=keep; hist=h; ended=e; render(true); });
 
 (()=>{ const p=(save.last && findId(save.last)) || [0,0]; loadLevel(p[0],p[1]); })();
