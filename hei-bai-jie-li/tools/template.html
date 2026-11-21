@@ -200,15 +200,21 @@ input[type=range]{width:150px;accent-color:var(--gold)}
 
 <script>
 __SOUND__
-/* ===== 震动反馈：安卓用 navigator.vibrate；iPhone（iOS 18+ Safari）借系统开关控件触发轻触感 ===== */
+/* ===== 震动反馈：安卓用 navigator.vibrate；iPhone 借系统开关控件触发轻触感。
+   注意：苹果在 iOS 26.5 堵上了这个办法，iPhone 上网页从此无法震动，只有 iOS 17.4–26.4 有效 ===== */
 const Haptic = (() => {
   const canVibrate = typeof navigator.vibrate === 'function';
   const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let on = true, iosLabel = null;
-  if (!canVibrate && isIOS) {
+  // iOS 版本：优先看 Safari 的 Version/x.y，没有就看系统版本 OS x_y
+  const vm = /Version\/(\d+)\.(\d+)/.exec(navigator.userAgent) || /OS (\d+)_(\d+)/.exec(navigator.userAgent);
+  const iosVer = vm ? (+vm[1]) + (+vm[2]) / 100 : 0;
+  const iosOk = isIOS && iosVer >= 17.04 && iosVer < 26.05;
+  let on = true, iosLabel = null, deferred = null, deferring = false;
+  if (!canVibrate && iosOk) {
     iosLabel = document.createElement('label');
     iosLabel.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
-    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1; inp.id = 'hapticSwitch';
+    iosLabel.htmlFor = 'hapticSwitch'; iosLabel.setAttribute('aria-hidden', 'true');
     iosLabel.appendChild(inp);
     const add = () => document.body.appendChild(iosLabel);
     document.body ? add() : document.addEventListener('DOMContentLoaded', add);
@@ -218,13 +224,57 @@ const Haptic = (() => {
               undo: [6], win1: [20, 60, 30], win3: [20, 60, 20, 60, 20, 60, 70] };
   function play(name) {
     if (!on) return; const p = P[name]; if (!p) return;
+    // iPhone 只在“点按/松手”这类操作里允许触感；滑动途中先记下，松手时再触发
+    if (deferring && iosLabel) { if (!deferred || p.length > P[deferred].length) deferred = name; return; }
     try {
       if (canVibrate) { navigator.vibrate(p); return; }
       if (iosLabel) for (let k = 0; k < p.length; k += 2) { const d = p.slice(0, k).reduce((a, b) => a + b, 0);
         d ? setTimeout(() => iosLabel.click(), d) : iosLabel.click(); }
     } catch (e) {}
   }
-  return { play, set(v) { on = v; }, supported: canVibrate || isIOS };
+  return { play, set(v) { on = v; }, supported: canVibrate || !!iosLabel,
+    defer(v) { deferring = v; }, flush() { const d = deferred; deferred = null; if (d) play(d); } };
+})();
+/* ===== 画面反馈：涟漪、星星迸发、过关光晕；不能震动的设备（如 iPhone）再加上棋盘“震感”代替震动 ===== */
+const Visual = (() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let quake = false;                       // 是否用棋盘晃动代替震动
+  const wrap = () => document.querySelector('.board-wrap'), board = () => document.getElementById('board');
+  const anim = (el, kf, o) => { try { return el.animate(kf, o); } catch (e) { return null; } };
+  const DXY = [[0,-1],[1,0],[0,1],[-1,0]];
+  function center(i) { const c = cellEls[i]; return c ? [c.offsetLeft + c.offsetWidth / 2, c.offsetTop + c.offsetHeight / 2, c.offsetWidth] : null; }
+  function blob(x, y, css) { const e = document.createElement('div');
+    e.style.cssText = `position:absolute;left:${x}px;top:${y}px;pointer-events:none;z-index:5;` + css; board().appendChild(e); return e; }
+  function ripple(i, color) { const p = center(i); if (!p) return; const s = p[2] * .9;
+    const e = blob(p[0] - s / 2, p[1] - s / 2, `width:${s}px;height:${s}px;border-radius:50%;border:2.5px solid ${color}`);
+    const a = anim(e, [{ transform: 'scale(.35)', opacity: .9 }, { transform: 'scale(1.25)', opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.2,.7,.3,1)' });
+    a ? a.onfinish = () => e.remove() : e.remove(); }
+  function burst(i, n, dist) { const p = center(i); if (!p) return;
+    for (let k = 0; k < n; k++) { const ang = (k / n) * Math.PI * 2 + Math.random() * .5, r = dist * (.7 + Math.random() * .5), sz = 10 + Math.random() * 6;
+      const e = blob(p[0] - sz / 2, p[1] - sz / 2, `width:${sz}px;height:${sz}px;background:var(--gold);clip-path:polygon(50% 0,61% 38%,100% 50%,61% 62%,50% 100%,39% 62%,0 50%,39% 38%)`);
+      const a = anim(e, [{ transform: 'translate(0,0) scale(1) rotate(0)', opacity: 1 },
+        { transform: `translate(${Math.cos(ang) * r}px,${Math.sin(ang) * r}px) scale(.3) rotate(${180 + Math.random() * 180}deg)`, opacity: 0 }],
+        { duration: 560 + Math.random() * 200, easing: 'cubic-bezier(.15,.8,.3,1)' });
+      a ? a.onfinish = () => e.remove() : e.remove(); } }
+  function glow(color, ms) { anim(wrap(), [{ boxShadow: `0 0 0 0 ${color}` }, { boxShadow: `0 0 0 10px transparent` }], { duration: ms, easing: 'ease-out' }); }
+  function nudge(d, px, ms) { if (reduce) return; const [x, y] = DXY[d];
+    anim(wrap(), [{ transform: 'translate(0,0)' }, { transform: `translate(${x * px}px,${y * px}px)` }, { transform: 'translate(0,0)' }], { duration: ms, easing: 'ease-out' }); }
+  function shake(px, ms, n) { if (reduce) return; const kf = [{ transform: 'translateX(0)' }];
+    for (let k = 1; k <= n; k++) kf.push({ transform: `translateX(${(k % 2 ? 1 : -1) * px * (1 - k / (n + 1))}px)` });
+    kf.push({ transform: 'translateX(0)' }); anim(wrap(), kf, { duration: ms, easing: 'ease-out' }); }
+  function hudStar(k) { const s = document.querySelectorAll('#starsHud svg')[k]; if (s) anim(s, [{ transform: 'scale(1)' }, { transform: 'scale(1.7)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'cubic-bezier(.3,1.6,.5,1)' }); }
+  return {
+    set(v) { quake = v; },
+    move(i, d, white) { ripple(i, white ? 'var(--ink)' : 'var(--paper)'); if (quake) nudge(d, 3, 140); },
+    star(i, k) { burst(i, 10, 46); hudStar(k); glow('rgba(217,162,27,.55)', 520); if (quake) nudge(2, 4, 180); },
+    bad(d) { if (quake) nudge(d, 5, 160); },
+    stuck() { glow('rgba(200,70,50,.6)', 700); if (quake) shake(9, 520, 6); },
+    undo() { if (quake) nudge(0, -2, 120); },
+    win(stars) { if (!reduce) anim(wrap(), [{ transform: 'scale(1)' }, { transform: 'scale(1.035)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'cubic-bezier(.3,1.5,.5,1)' });
+      glow('rgba(217,162,27,.7)', 900);
+      if (stars === 3) { const cells = cellEls.map((c, i) => i).filter(i => S.cells[i] !== '#');
+        [0, 160, 320].forEach(dt => setTimeout(() => burst(cells[Math.floor(Math.random() * cells.length)], 12, 70), dt)); } },
+  };
 })();
 const TIERS = __TIERS__;
 const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
@@ -323,7 +373,7 @@ function move(d){
   const n=legal(S,d), t=mover(S);
   if(n<0){ const p=t?pieceW:pieceB; p.classList.remove('shake'); void p.offsetWidth; p.classList.add('shake');
     const target=nb(t?S.w:S.b,d);
-    Sound.fx.bad(); Haptic.play('bad');
+    Sound.fx.bad(); Haptic.play('bad'); Visual.bad(d);
     if(target>=0 && target===(t?S.b:S.w)) setMsg('被对方挡住了');
     else if(target>=0) setMsg(t?'白小人只能走黑格':'黑小人只能走白格');
     return; }
@@ -333,20 +383,21 @@ function move(d){
   S.turn=1-t; S.moves++;
   Sound.fx.move(t===1); if(gotStar) Sound.fx.star();
   Haptic.play(gotStar?'star':'move');
+  Visual.move(n,d,t===1); if(gotStar) Visual.star(n, lv.st.indexOf(n));
   render(false,d);
   if(won(S)){ ended=true; setMsg('两人都到达终点'); setTimeout(win,380); return; }
-  if(!anyLegal(S)){ Sound.fx.stuck(); setTimeout(()=>Haptic.play('stuck'),120); setMsg((mover(S)?'白':'黑')+'无路可走了，撤销一步或重开',true); }
+  if(!anyLegal(S)){ Sound.fx.stuck(); setTimeout(()=>Haptic.play('stuck'),120); Visual.stuck(); setMsg((mover(S)?'白':'黑')+'无路可走了，撤销一步或重开',true); }
   else if(t===0&&lockedB(S)) setMsg('黑到达终点，接下来只轮白走');
   else if(t===1&&lockedW(S)) setMsg('白到达终点，接下来只轮黑走');
   else setMsg('');
 }
-function undo(){ if(!hist.length) return; Sound.fx.undo(); Haptic.play('undo'); S=hist.pop(); ended=false; render(false); setMsg(''); }
+function undo(){ if(!hist.length) return; Sound.fx.undo(); Haptic.play('undo'); Visual.undo(); S=hist.pop(); ended=false; render(false); setMsg(''); }
 function reset(){ if(!hist.length) return; S=stateInit(); hist=[]; ended=false; render(true); setMsg(''); }
 
 function win(){
   const n=S.got.filter(Boolean).length, k=key(ti,li), prev=save.best[k];
   if(!prev || n>prev.s || (n===prev.s && S.moves<prev.m)) save.best[k]={s:n,m:S.moves};
-  store.set(save); Sound.fx.win(n); Haptic.play(n===3?'win3':'win1');
+  store.set(save); Sound.fx.win(n); Haptic.play(n===3?'win3':'win1'); Visual.win(n);
   $('winTitle').textContent = n===3?'完美通关':'过关';
   $('winStars').innerHTML=[0,1,2].map(k=>STAR(k<n).replace('<svg','<svg class="'+(k<n?'on':'')+'"')).join('');
   let t=`用了 ${S.moves} 步，拿到 ${n} 颗星。`;
@@ -391,7 +442,11 @@ $('btnUndo').onclick=undo; $('btnReset').onclick=reset;
 /* 声音设置 */
 save.sound = Object.assign({music:true, sfx:true, vol:.7, vib:true}, save.sound||{});
 Sound.setCfg(save.sound); Haptic.set(save.sound.vib);
-if(!Haptic.supported) $('rowVib').style.display='none';
+if(!Haptic.supported){
+  $('rowVib').firstElementChild.innerHTML='画面震感<small>这台设备的网页无法震动，用棋盘晃动代替</small>';
+  $('swVib').setAttribute('aria-label','画面震感');
+}
+Visual.set(!Haptic.supported && save.sound.vib);
 function syncSoundUI(){ const s=save.sound;
   $('swMusic').setAttribute('aria-checked', s.music); $('swSfx').setAttribute('aria-checked', s.sfx); $('swVib').setAttribute('aria-checked', s.vib);
   $('vol').value=Math.round(s.vol*100); $('btnSound').classList.toggle('muted', !s.music && !s.sfx || s.vol===0); }
@@ -400,7 +455,8 @@ $('btnSound').onclick=()=>{ Sound.ensure(); syncSoundUI(); $('ovSound').classLis
 $('btnSoundOk').onclick=()=>$('ovSound').classList.remove('on');
 $('swMusic').onclick=()=>{ Sound.ensure(); setSound({music:!save.sound.music}); };
 $('swSfx').onclick=()=>{ Sound.ensure(); setSound({sfx:!save.sound.sfx}); };
-$('swVib').onclick=()=>{ setSound({vib:!save.sound.vib}); Haptic.set(save.sound.vib); Haptic.play('star'); };
+$('swVib').onclick=()=>{ setSound({vib:!save.sound.vib}); Haptic.set(save.sound.vib); Visual.set(!Haptic.supported && save.sound.vib);
+  if(save.sound.vib){ Haptic.play('star'); Visual.bad(1); } };
 $('vol').oninput=e=>setSound({vol:e.target.value/100});
 syncSoundUI();
 // 浏览器要求用户先有操作才能出声：第一次点击/按键时启动
@@ -424,11 +480,12 @@ document.addEventListener('keydown',e=>{
 let sx=null, sy=null, swiped=false;
 board.addEventListener('pointerdown',e=>{ sx=e.clientX; sy=e.clientY; swiped=false; });
 board.addEventListener('pointermove',e=>{ if(sx==null||swiped) return; const dx=e.clientX-sx, dy=e.clientY-sy;
-  if(Math.max(Math.abs(dx),Math.abs(dy))>28){ swiped=true; move(Math.abs(dx)>Math.abs(dy)?(dx>0?1:3):(dy>0?2:0)); } });
+  if(Math.max(Math.abs(dx),Math.abs(dy))>28){ swiped=true; Haptic.defer(true); move(Math.abs(dx)>Math.abs(dy)?(dx>0?1:3):(dy>0?2:0)); } });
 board.addEventListener('pointerup',e=>{
   if(sx!=null && !swiped){ const c=e.target.closest('.cell'); if(c){ const i=+c.dataset.i, t=mover(S), cur=t?S.w:S.b;
       for(let d=0;d<4;d++) if(nb(cur,d)===i||(()=>{const x=cur%lv.w+DIRS[d][0],y=Math.floor(cur/lv.w)+DIRS[d][1];return x>=0&&y>=0&&x<lv.w&&y<lv.h&&y*lv.w+x===i})()){ move(d); break; } } }
-  sx=sy=null; });
+  sx=sy=null; Haptic.defer(false); Haptic.flush(); });
+board.addEventListener('pointercancel',()=>{ sx=sy=null; Haptic.defer(false); Haptic.flush(); });
 window.addEventListener('resize',()=>{ const keep=S, h=hist, e=ended; loadLevel(ti,li); S=keep; hist=h; ended=e; render(true); });
 
 (()=>{ const p=(save.last && findId(save.last)) || [0,0]; loadLevel(p[0],p[1]); })();

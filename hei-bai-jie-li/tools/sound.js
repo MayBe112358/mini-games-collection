@@ -16,7 +16,8 @@ const Sound = (() => {
   const GAIN = 3;                                          // 整体响度补偿（各声部本身很轻）
   const hz = m => 440 * Math.pow(2, (m - 69) / 12);
 
-  let ctx = null, master, music, sfx, wet, delayIn, timer = null;
+  let ctx = null, master, music, sfx, delayIn, timer = null;
+  const LEVEL = { music: .55, sfx: .8 };
   let mood = MOODS[0], moodIdx = 0, step = 0, nextT = 0, melPos = 2, lastNote = 0;
   let cfg = { music: true, sfx: true, vol: .7 };
 
@@ -26,18 +27,21 @@ const Sound = (() => {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = .01; comp.release.value = .3;
     master.connect(comp); comp.connect(ctx.destination);
-    music = ctx.createGain(); music.gain.value = cfg.music ? .55 : 0; music.connect(master);
-    sfx = ctx.createGain(); sfx.gain.value = cfg.sfx ? .8 : 0; sfx.connect(master);
+
     // 混响：用衰减噪声生成冲激响应
     const len = Math.floor(ctx.sampleRate * 3.2), ir = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let s = 12345 + ch * 777;
       for (let i = 0; i < len; i++) { s = (s * 16807) % 2147483647; d[i] = ((s / 2147483647) * 2 - 1) * Math.pow(1 - i / len, 2.6); } }
-    const conv = ctx.createConvolver(); conv.buffer = ir;
-    wet = ctx.createGain(); wet.gain.value = .5; wet.connect(conv); conv.connect(master);
+    // 音乐和音效各走一条总线，干声和混响都在总线开关之后，关掉就彻底没声
+    const bus = on => { const out = ctx.createGain(), inp = ctx.createGain(), wetIn = ctx.createGain(), conv = ctx.createConvolver();
+      out.gain.value = on; conv.buffer = ir; wetIn.gain.value = .5;
+      inp.connect(out); wetIn.connect(conv); conv.connect(out); out.connect(master);
+      return { in: inp, wetIn, out }; };
+    music = bus(cfg.music ? LEVEL.music : 0); sfx = bus(cfg.sfx ? LEVEL.sfx : 0);
     // 乒乓式回声：给旋律一点空间感
     delayIn = ctx.createGain(); const dl = ctx.createDelay(2), fb = ctx.createGain(), lp = ctx.createBiquadFilter();
     dl.delayTime.value = 60 / mood.bpm * .75; fb.gain.value = .32; lp.type = 'lowpass'; lp.frequency.value = 2400;
-    delayIn.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(music); lp.connect(wet);
+    delayIn.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(music.in); lp.connect(music.wetIn);
     delayIn._dl = dl;
   }
 
@@ -45,6 +49,7 @@ const Sound = (() => {
   function voice(dest, f, t, dur, { type = 'sine', att = .01, peak = .2, rel = 1, det = 0, send = .3, cutoff = 0 } = {}) {
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.value = f; o.detune.value = det;
+    const bus = dest.in ? dest : null; dest = bus ? bus.in : dest;
     let out = g;
     if (cutoff) { const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = cutoff; fl.Q.value = .3; g.connect(fl); out = fl; }
     g.gain.setValueAtTime(0, t);
@@ -52,7 +57,7 @@ const Sound = (() => {
     g.gain.setValueAtTime(peak, t + Math.max(att, dur));
     g.gain.exponentialRampToValueAtTime(.0001, t + Math.max(att, dur) + rel);
     o.connect(g); out.connect(dest);
-    if (send) { const s = ctx.createGain(); s.gain.value = send; out.connect(s); s.connect(wet); }
+    if (send && bus) { const s = ctx.createGain(); s.gain.value = send; out.connect(s); s.connect(bus.wetIn); }
     o.start(t); o.stop(t + Math.max(att, dur) + rel + .05);
   }
   function pluck(dest, m, t, vel = 1, send = .35) {      // 拨弦/钟琴般的音色
@@ -88,7 +93,8 @@ const Sound = (() => {
     if (!ctx) return;
     const spb = 60 / mood.bpm / 2;
     if (nextT < ctx.currentTime) nextT = ctx.currentTime + .05;
-    while (nextT < ctx.currentTime + .35) { scheduleStep(nextT); nextT += spb; }
+    // 音乐关掉时不再排音符，只让节拍继续走（音效取和弦还要用）
+    while (nextT < ctx.currentTime + .35) { if (cfg.music) scheduleStep(nextT); else step++; nextT += spb; }
   }
 
   /* --- 对外接口 --- */
@@ -98,7 +104,7 @@ const Sound = (() => {
       try { build(new AC()); } catch (e) { return; }
       timer = setInterval(tick, 100);
     }
-    if (ctx.state === 'suspended' && !document.hidden) ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended' && !document.hidden && (cfg.music || cfg.sfx)) ctx.resume().catch(() => {});
   }
   function setMood(i) {
     if (i === moodIdx && ctx) return;
@@ -111,12 +117,17 @@ const Sound = (() => {
     if (!ctx) return;
     const now = ctx.currentTime;
     master.gain.setTargetAtTime(cfg.vol * GAIN, now, .05);
-    music.gain.setTargetAtTime(cfg.music ? .55 : 0, now, .3);
-    sfx.gain.setTargetAtTime(cfg.sfx ? .8 : 0, now, .05);
+    music.out.gain.setTargetAtTime(cfg.music ? LEVEL.music : 0, now, .08);
+    sfx.out.gain.setTargetAtTime(cfg.sfx ? LEVEL.sfx : 0, now, .03);
+    if (!cfg.music && !cfg.sfx) setTimeout(() => { if (!cfg.music && !cfg.sfx) ctx.suspend().catch(() => {}); }, 400);
+    else if (ctx.state === 'suspended' && !document.hidden) ctx.resume().catch(() => {});
   }
   const chordNow = () => mood.prog[Math.floor(Math.max(0, step - 1) / 16) % mood.prog.length];
   const now = () => ctx.currentTime + .01;
-  const ok = () => ctx && cfg.sfx && ctx.state === 'running';
+  const ok = () => {
+    if (!ctx || !cfg.sfx || document.hidden) return false;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});   // 刚从全关切回来时先唤醒
+    return true; };
   const fx = {
     // 黑走低音、白走高音，音高取自当前和弦，和背景音乐始终协和
     move(isWhite) { if (!ok()) return; const c = chordNow(), n = c[Math.floor(Math.random() * c.length)];
@@ -129,10 +140,11 @@ const Sound = (() => {
     stuck() { if (!ok()) return; const t = now(), r = mood.root;
       pluck(sfx, r + 3, t, .7); pluck(sfx, r - 2, t + .22, .7); pluck(sfx, r - 9, t + .44, .8); },
     undo() { if (!ok()) return; pluck(sfx, mood.root + mood.scale[1] + 12, now(), .35, .2); },
-    win(stars) { if (!ctx || ctx.state !== 'running') return;
+    win(stars) { if (!ctx || document.hidden || (!cfg.music && !cfg.sfx)) return;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
       const t = now(), c = chordNow();
-      music.gain.setTargetAtTime(cfg.music ? .15 : 0, t, .1);          // 过关时音乐让一让
-      music.gain.setTargetAtTime(cfg.music ? .55 : 0, t + 2.6, .8);
+      music.out.gain.setTargetAtTime(cfg.music ? .15 : 0, t, .1);      // 过关时音乐让一让
+      music.out.gain.setTargetAtTime(cfg.music ? LEVEL.music : 0, t + 2.6, .8);
       if (!cfg.sfx) return;
       const notes = [0, 1, 2, 3, 0, 1, 2, 3].map((k, j) => mood.root + c[k] + (j > 3 ? 12 : 0));
       notes.slice(0, 5 + stars).forEach((m, j) => pluck(sfx, m, t + j * .09, .75, .55));
