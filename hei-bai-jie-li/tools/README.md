@@ -13,6 +13,7 @@ python3 build.py ../index.html   # 把 tiers.json 填进 template.html
 
 - `bwsolve.c`：BFS 求解器。算三星最短步数、陷阱率（走不到三星的局面占比）、关键抉择数（最短解上有多少步走错就拿不满三星）。
 - `solver.py`：同样规则的 Python 版，便于阅读。
+- `sound.js`：背景音乐和音效，用 Web Audio 实时合成，`build.py` 会把它和关卡一起填进页面。每档难度的调式、和弦、速度在文件开头的 `MOODS` 里改。
 - 难度分档主要看关键抉择数，其次是步数和陷阱率，见 `select_levels.py`。
 
 ## 加关卡时保住玩家存档

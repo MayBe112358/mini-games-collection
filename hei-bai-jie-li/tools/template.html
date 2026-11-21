@@ -116,6 +116,14 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between}
 .lv-scroll{max-height:min(52vh,420px);overflow-y:auto;margin-top:10px;padding:2px}
 .lv-scroll .levels{margin-top:0;grid-template-columns:repeat(5,1fr);gap:8px}
 .lv{font-size:15px}
+.icon-btn .off{display:none} .icon-btn.muted .on{display:none} .icon-btn.muted .off{display:block}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid var(--line);font-size:15px;color:var(--fg);text-align:left}
+.set-row:last-of-type{border-bottom:none}
+.set-row small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.sw{position:relative;width:46px;height:28px;flex:none;border-radius:999px;border:none;background:var(--line);cursor:pointer;transition:background .2s;padding:0}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.sw[aria-checked=true]{background:var(--gold)} .sw[aria-checked=true]::after{transform:translateX(18px)}
+input[type=range]{width:150px;accent-color:var(--gold)}
 </style>
 </head>
 <body>
@@ -123,6 +131,7 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between}
   <header>
     <div class="brand"><span class="yy"></span>黑白接力</div>
     <div style="display:flex;gap:2px">
+      <button class="icon-btn" id="btnSound" aria-label="声音与震动"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><g class="on"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></g><g class="off"><path d="M9 18V6l11-2v8"/><circle cx="6.5" cy="18" r="2.5"/><path d="m15 15 6 6m0-6-6 6"/></g></svg></button>
       <button class="icon-btn" id="btnTheme" aria-label="切换主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
       <button class="icon-btn" id="btnHelp" aria-label="规则"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg></button>
       <button class="icon-btn" id="btnLevels" aria-label="选关"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg></button>
@@ -162,6 +171,17 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between}
   <div class="row"><button class="btn primary" id="btnHelpOk">开始</button></div>
 </div></div>
 
+<div class="overlay" id="ovSound"><div class="sheet">
+  <h2>声音与震动</h2>
+  <div style="margin-top:8px">
+    <div class="set-row"><div>背景音乐<small>实时生成，每个难度一种氛围</small></div><button class="sw" id="swMusic" role="switch" aria-checked="true" aria-label="背景音乐"></button></div>
+    <div class="set-row"><div>音效<small>走子、拾星、过关</small></div><button class="sw" id="swSfx" role="switch" aria-checked="true" aria-label="音效"></button></div>
+    <div class="set-row" id="rowVib"><div>震动<small>走子、拾星、走错时轻震</small></div><button class="sw" id="swVib" role="switch" aria-checked="true" aria-label="震动"></button></div>
+    <div class="set-row"><div>音量</div><input type="range" id="vol" min="0" max="100" value="70" aria-label="音量"></div>
+  </div>
+  <div class="row"><button class="btn primary" id="btnSoundOk">好</button></div>
+</div></div>
+
 <div class="overlay" id="ovWin"><div class="sheet">
   <h2 id="winTitle">过关</h2>
   <div class="big-stars" id="winStars"></div>
@@ -179,6 +199,33 @@ header{width:100%;display:flex;align-items:center;justify-content:space-between}
 </div></div>
 
 <script>
+__SOUND__
+/* ===== 震动反馈：安卓用 navigator.vibrate；iPhone（iOS 18+ Safari）借系统开关控件触发轻触感 ===== */
+const Haptic = (() => {
+  const canVibrate = typeof navigator.vibrate === 'function';
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let on = true, iosLabel = null;
+  if (!canVibrate && isIOS) {
+    iosLabel = document.createElement('label');
+    iosLabel.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
+    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+    iosLabel.appendChild(inp);
+    const add = () => document.body.appendChild(iosLabel);
+    document.body ? add() : document.addEventListener('DOMContentLoaded', add);
+  }
+  // 安卓按毫秒节奏震动；iPhone 只能一下一下“咔哒”，按节奏里的震动段数敲
+  const P = { move: [8], star: [14, 50, 14, 50, 22], bad: [28], stuck: [45, 70, 45, 70, 90],
+              undo: [6], win1: [20, 60, 30], win3: [20, 60, 20, 60, 20, 60, 70] };
+  function play(name) {
+    if (!on) return; const p = P[name]; if (!p) return;
+    try {
+      if (canVibrate) { navigator.vibrate(p); return; }
+      if (iosLabel) for (let k = 0; k < p.length; k += 2) { const d = p.slice(0, k).reduce((a, b) => a + b, 0);
+        d ? setTimeout(() => iosLabel.click(), d) : iosLabel.click(); }
+    } catch (e) {}
+  }
+  return { play, set(v) { on = v; }, supported: canVibrate || isIOS };
+})();
 const TIERS = __TIERS__;
 const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
 const STAR = on => `<svg viewBox="0 0 24 24"><path d="M12 2.6l2.9 6 6.5.8-4.8 4.5 1.2 6.5L12 17.3l-5.8 3.1 1.2-6.5L2.6 9.4l6.5-.8z" fill="${on?'var(--gold)':'var(--line)'}" stroke="${on?'var(--gold-d)':'none'}" stroke-width="1" stroke-linejoin="round"/></svg>`;
@@ -229,7 +276,7 @@ const anyLegal = s => [0,1,2,3].some(d=>legal(s,d)>=0);
 const won = s => lockedB(s)&&lockedW(s);
 
 function loadLevel(t,i){
-  ti=t; li=i; lv=TIERS[t].levels[i]; S=stateInit(); hist=[]; ended=false;
+  ti=t; li=i; lv=TIERS[t].levels[i]; Sound.setMood(t); S=stateInit(); hist=[]; ended=false;
   const avail = Math.min(window.innerWidth,480)-32-20;
   const cs = Math.max(40, Math.min(66, Math.floor((avail-(lv.w-1)*3)/lv.w)));
   document.documentElement.style.setProperty('--cell', cs+'px');
@@ -276,27 +323,30 @@ function move(d){
   const n=legal(S,d), t=mover(S);
   if(n<0){ const p=t?pieceW:pieceB; p.classList.remove('shake'); void p.offsetWidth; p.classList.add('shake');
     const target=nb(t?S.w:S.b,d);
+    Sound.fx.bad(); Haptic.play('bad');
     if(target>=0 && target===(t?S.b:S.w)) setMsg('被对方挡住了');
     else if(target>=0) setMsg(t?'白小人只能走黑格':'黑小人只能走白格');
     return; }
   hist.push(clone(S));
   if(t===0){ S.b=n; S.cells[n]='k'; } else { S.w=n; S.cells[n]='w'; }
-  lv.st.forEach((s,k)=>{ if(s===n) S.got[k]=true; });
+  let gotStar=false; lv.st.forEach((s,k)=>{ if(s===n && !S.got[k]){ S.got[k]=true; gotStar=true; } });
   S.turn=1-t; S.moves++;
+  Sound.fx.move(t===1); if(gotStar) Sound.fx.star();
+  Haptic.play(gotStar?'star':'move');
   render(false,d);
   if(won(S)){ ended=true; setMsg('两人都到达终点'); setTimeout(win,380); return; }
-  if(!anyLegal(S)){ setMsg((mover(S)?'白':'黑')+'无路可走了，撤销一步或重开',true); }
+  if(!anyLegal(S)){ Sound.fx.stuck(); setTimeout(()=>Haptic.play('stuck'),120); setMsg((mover(S)?'白':'黑')+'无路可走了，撤销一步或重开',true); }
   else if(t===0&&lockedB(S)) setMsg('黑到达终点，接下来只轮白走');
   else if(t===1&&lockedW(S)) setMsg('白到达终点，接下来只轮黑走');
   else setMsg('');
 }
-function undo(){ if(!hist.length) return; S=hist.pop(); ended=false; render(false); setMsg(''); }
+function undo(){ if(!hist.length) return; Sound.fx.undo(); Haptic.play('undo'); S=hist.pop(); ended=false; render(false); setMsg(''); }
 function reset(){ if(!hist.length) return; S=stateInit(); hist=[]; ended=false; render(true); setMsg(''); }
 
 function win(){
   const n=S.got.filter(Boolean).length, k=key(ti,li), prev=save.best[k];
   if(!prev || n>prev.s || (n===prev.s && S.moves<prev.m)) save.best[k]={s:n,m:S.moves};
-  store.set(save);
+  store.set(save); Sound.fx.win(n); Haptic.play(n===3?'win3':'win1');
   $('winTitle').textContent = n===3?'完美通关':'过关';
   $('winStars').innerHTML=[0,1,2].map(k=>STAR(k<n).replace('<svg','<svg class="'+(k<n?'on':'')+'"')).join('');
   let t=`用了 ${S.moves} 步，拿到 ${n} 颗星。`;
@@ -338,6 +388,24 @@ function renderGrid(scrollToCur){
 /* 输入 */
 document.querySelectorAll('.pad button').forEach(b=>b.addEventListener('click',()=>move(+b.dataset.d)));
 $('btnUndo').onclick=undo; $('btnReset').onclick=reset;
+/* 声音设置 */
+save.sound = Object.assign({music:true, sfx:true, vol:.7, vib:true}, save.sound||{});
+Sound.setCfg(save.sound); Haptic.set(save.sound.vib);
+if(!Haptic.supported) $('rowVib').style.display='none';
+function syncSoundUI(){ const s=save.sound;
+  $('swMusic').setAttribute('aria-checked', s.music); $('swSfx').setAttribute('aria-checked', s.sfx); $('swVib').setAttribute('aria-checked', s.vib);
+  $('vol').value=Math.round(s.vol*100); $('btnSound').classList.toggle('muted', !s.music && !s.sfx || s.vol===0); }
+function setSound(p){ Object.assign(save.sound,p); store.set(save); Sound.setCfg(save.sound); syncSoundUI(); }
+$('btnSound').onclick=()=>{ Sound.ensure(); syncSoundUI(); $('ovSound').classList.add('on'); };
+$('btnSoundOk').onclick=()=>$('ovSound').classList.remove('on');
+$('swMusic').onclick=()=>{ Sound.ensure(); setSound({music:!save.sound.music}); };
+$('swSfx').onclick=()=>{ Sound.ensure(); setSound({sfx:!save.sound.sfx}); };
+$('swVib').onclick=()=>{ setSound({vib:!save.sound.vib}); Haptic.set(save.sound.vib); Haptic.play('star'); };
+$('vol').oninput=e=>setSound({vol:e.target.value/100});
+syncSoundUI();
+// 浏览器要求用户先有操作才能出声：第一次点击/按键时启动
+['pointerdown','keydown','touchend'].forEach(ev=>document.addEventListener(ev,()=>{ if(save.sound.music||save.sound.sfx) Sound.ensure(); },{capture:true,passive:true}));
+
 const THEMES=['auto','light','dark'], THEME_NAME={auto:'跟随系统',light:'浅色',dark:'深色'};
 function applyTheme(){ const th=save.theme||'auto'; if(th==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=th;
   $('metaScheme').content = th==='auto'?'light dark':th; }
